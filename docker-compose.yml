@@ -1,0 +1,20 @@
+version: '3.9'
+services:
+  bot:
+    build: .
+    container_name: collibot
+    restart: unless-stopped
+    env_file:
+      - ./bot.env
+    environment:
+      - DB_PATH=/data/db.sqlite
+      - WHATSAPP_AUTH_DIR=/session
+    volumes:
+      - db_data:/data
+      - wa_session:/session
+    # Uncomment para debug detallado de whatsapp-web.js
+    # environment:
+    #   - DEBUG=WWebJS*
+volumes:
+  db_data:
+  wa_session:

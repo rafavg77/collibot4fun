@@ -1,0 +1,23 @@
+{
+  "name": "collibot4fun",
+  "version": "1.0.0",
+  "main": "dist/app.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "ts-node src/app.ts"
+  },
+  "dependencies": {
+    "dotenv": "^16.3.1",
+  "axios": "^1.7.7",
+    "qrcode-terminal": "^0.12.0",
+    "reflect-metadata": "^0.1.14",
+    "sqlite3": "^5.1.6",
+    "typeorm": "^0.3.17",
+    "whatsapp-web.js": "^1.23.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.3.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.9.2"
+  }
+}

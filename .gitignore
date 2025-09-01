@@ -1,0 +1,8 @@
+bot.env
+db.sqlite
+session/
+session/*
+dist/
+node_modules/
+.wwebjs_auth
+.wwebjs_cache
