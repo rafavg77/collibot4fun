@@ -145,6 +145,96 @@ Persistencia:
 
 Variables se inyectan vía `env_file: bot.env` (asegúrate de copiar sólo variables necesarias y NO subir el archivo a un repo público con secretos/URLs sensibles).
 
+### Problema común: SQLITE_CANTOPEN
+Si ves repetidamente `SQLITE_CANTOPEN: unable to open database file` el usuario dentro del contenedor (`app`, UID 1000) no tiene permisos de escritura sobre el volumen montado en `/data` (y/o `/session`). Con volúmenes *named* nuevos Docker los crea root:root.
+
+Solución rápida (ajustar ownership de volúmenes existentes):
+```bash
+docker stop collibot || true
+docker rm collibot || true
+docker run --rm \
+	-v collibot4fun_db_data:/data \
+	-v collibot4fun_wa_session:/session \
+	alpine sh -c "chown -R 1000:1000 /data /session && ls -ld /data /session"
+
+docker run -d --name collibot \
+	--restart unless-stopped \
+	--env-file bot.env \
+	-v collibot4fun_db_data:/data \
+	-v collibot4fun_wa_session:/session \
+	rafavg77/collibot4fun:1.0.0
+```
+Comprueba logs:
+```bash
+docker logs -f collibot
+```
+Verificación de escritura:
+```bash
+docker exec -it collibot sh -c "touch /data/_test && ls -l /data/_test && rm /data/_test"
+```
+
+Alternativas:
+- Ejecutar como root (`user: root` en compose) — menos seguro.
+- Script de entrypoint que haga `chown` (requiere ejecutar como root y luego bajar privilegios).
+
+### Reconstruir imagen local
+```bash
+docker build -t rafavg77/collibot4fun:1.0.0 -t rafavg77/collibot4fun:latest .
+```
+
+### Publicar en Docker Hub (nueva versión)
+1. Inicia sesión:
+```bash
+docker login
+```
+2. Construye con nueva versión (ej: 1.0.1):
+```bash
+docker build -t rafavg77/collibot4fun:1.0.1 -t rafavg77/collibot4fun:latest .
+```
+3. Push:
+```bash
+docker push rafavg77/collibot4fun:1.0.1
+docker push rafavg77/collibot4fun:latest
+```
+4. (Opcional) Tag git:
+```bash
+git tag -a v1.0.1 -m "Release 1.0.1"
+git push origin v1.0.1
+```
+
+### Multi-arquitectura (amd64 + arm64) con buildx
+```bash
+docker buildx create --name multi --use || true
+docker buildx build --platform linux/amd64,linux/arm64 \
+	-t rafavg77/collibot4fun:1.0.1 \
+	-t rafavg77/collibot4fun:latest \
+	--push .
+```
+
+### Actualizar contenedor en servidor
+```bash
+docker pull rafavg77/collibot4fun:1.0.1
+docker stop collibot || true
+docker rm collibot || true
+docker run -d --name collibot \
+	--restart unless-stopped \
+	--env-file bot.env \
+	-v collibot4fun_db_data:/data \
+	-v collibot4fun_wa_session:/session \
+	rafavg77/collibot4fun:1.0.1
+```
+
+### Ver logs y QR
+```bash
+docker logs -f collibot
+```
+Si necesitas re-escanear (sesión inválida), elimina volumen de sesión:
+```bash
+docker stop collibot
+docker rm collibot
+docker volume rm collibot4fun_wa_session   # cuidado: pierdes sesión anterior
+```
+
 ## 📤 Exportación CSV Auditoría
 En menú auditoría opción 9 genera un CSV con columnas clave (timestamp, actor, tipo, detalle). Se envía como documento al chat admin.
 
