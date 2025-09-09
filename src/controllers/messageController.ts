@@ -5,6 +5,8 @@ import { AppDataSource } from '../database';
 import { getGateSnapshot } from '../services/cameraService';
 import { createUserManual, listUsers, updateUser, deleteUser, listBlacklist, removeFromBlacklist, updateUserPhone, searchUsers } from '../services/userService';
 import { createAudit } from '../services/auditService';
+import { globalMutex } from '../utils/concurrency';
+import { audit } from '../utils/logger';
 
 const MENU_TRIGGER_REGEX = /^(men[uú]|Men[uú]|MEN[uÚ])$/;
 const ATTEMPT_THRESHOLD = 10;
@@ -107,7 +109,7 @@ function buildAuditMenu(ctx?: AuditContext) {
 
 // ---- Main handler ----
 export async function handleIncomingMessage(client: Client, msg: Message) {
-  console.log(`Procesando mensaje de ${msg.from}: ${msg.body}`);
+  audit('process_message', { from: msg.from, body: msg.body });
   const bodyTrim = msg.body.trim();
   const numero = msg.from.replace(/@c\.us$/, '');
 
@@ -139,7 +141,12 @@ export async function handleIncomingMessage(client: Client, msg: Message) {
   const isAdmin = user.tipo === 'admin';
 
   const sendReply = async (text: string) => {
-    await client.sendMessage(msg.from, text);
+    const release = await globalMutex.lock();
+    try {
+      await client.sendMessage(msg.from, text);
+    } finally {
+      release();
+    }
     try { await createAudit({ usuario: user, accion: 'msg_out', detalles: { body: text } }); } catch {}
   };
 
@@ -377,7 +384,10 @@ export async function handleIncomingMessage(client: Client, msg: Message) {
       });
       const csv = [header, ...csvLines].join('\n');
       const media = new MessageMedia('text/csv', Buffer.from(csv).toString('base64'), 'mensajes.csv');
-      await client.sendMessage(msg.from, media);
+      const release = await globalMutex.lock();
+      try {
+        await client.sendMessage(msg.from, media);
+      } finally { release(); }
       try { await createAudit({ usuario: user, accion: 'msg_out', detalles: { body: '[CSV mensajes enviado]' } }); } catch {}
     } else if (choice === 5) {
       await auditCtxRepo.remove(auditCtx);
@@ -422,11 +432,13 @@ export async function handleIncomingMessage(client: Client, msg: Message) {
         if (!numeroNuevo || !nombreNuevo || !rol) throw new Error('Uso: !usuario alta <numero> <nombre> <admin|normal>');
         const tipo = rol === 'admin' ? UserType.ADMIN : UserType.NORMAL;
         await createUserManual(numeroNuevo, nombreNuevo, tipo);
-        await client.sendMessage(msg.from, '✅ Usuario creado');
+  const release2 = await globalMutex.lock();
+  try { await client.sendMessage(msg.from, '✅ Usuario creado'); } finally { release2(); }
       } else if (action === 'listar') {
         const usuarios = await listUsers();
         const lines = usuarios.map(u => `${u.numeroWhatsapp} | ${u.nombre} | ${u.tipo} | ${u.activo ? 'activo' : 'inactivo'}`);
-        await client.sendMessage(msg.from, lines.length ? lines.join('\n') : 'No hay usuarios');
+  const release3 = await globalMutex.lock();
+  try { await client.sendMessage(msg.from, lines.length ? lines.join('\n') : 'No hay usuarios'); } finally { release3(); }
       } else if (action === 'actualizar') {
         const numeroTarget = parts[1];
         if (!numeroTarget) throw new Error('Uso: !usuario actualizar <numero> [nombre=..] [rol=admin|normal] [activo=true|false]');
@@ -438,17 +450,21 @@ export async function handleIncomingMessage(client: Client, msg: Message) {
           if (k === 'activo') updates.activo = v === 'true';
         }
         await updateUser(numeroTarget, updates);
-        await client.sendMessage(msg.from, '✅ Usuario actualizado');
+  const release4 = await globalMutex.lock();
+  try { await client.sendMessage(msg.from, '✅ Usuario actualizado'); } finally { release4(); }
       } else if (action === 'borrar') {
         const numeroTarget = parts[1];
         if (!numeroTarget) throw new Error('Uso: !usuario borrar <numero>');
         await deleteUser(numeroTarget);
-        await client.sendMessage(msg.from, '✅ Usuario borrado');
+  const release5 = await globalMutex.lock();
+  try { await client.sendMessage(msg.from, '✅ Usuario borrado'); } finally { release5(); }
       } else {
-        await client.sendMessage(msg.from, buildUserAdminHelp());
+  const release6 = await globalMutex.lock();
+  try { await client.sendMessage(msg.from, buildUserAdminHelp()); } finally { release6(); }
       }
     } catch (e: any) {
-      await client.sendMessage(msg.from, `❌ ${e.message}`);
+  const releaseErr = await globalMutex.lock();
+  try { await client.sendMessage(msg.from, `❌ ${e.message}`); } finally { releaseErr(); }
     }
     return;
   }
@@ -461,14 +477,17 @@ export async function handleIncomingMessage(client: Client, msg: Message) {
       if (action === 'listar') {
         const list = await listBlacklist();
         const lines = list.map(b => b.numeroWhatsapp);
-        await client.sendMessage(msg.from, lines.length ? '*Blacklist*\n' + lines.join('\n') : 'Blacklist vacía');
+  const release7 = await globalMutex.lock();
+  try { await client.sendMessage(msg.from, lines.length ? '*Blacklist*\n' + lines.join('\n') : 'Blacklist vacía'); } finally { release7(); }
       } else if (action === 'remover') {
         const numeroTarget = parts[1];
         if (!numeroTarget) throw new Error('Uso: !blacklist remover <numero>');
         await removeFromBlacklist(numeroTarget);
-        await client.sendMessage(msg.from, '✅ Número removido del blacklist');
+  const release8 = await globalMutex.lock();
+  try { await client.sendMessage(msg.from, '✅ Número removido del blacklist'); } finally { release8(); }
       } else {
-        await client.sendMessage(msg.from, 'Comandos: !blacklist listar | !blacklist remover <numero>');
+  const release9 = await globalMutex.lock();
+  try { await client.sendMessage(msg.from, 'Comandos: !blacklist listar | !blacklist remover <numero>'); } finally { release9(); }
       }
     } catch (e: any) {
       await client.sendMessage(msg.from, `❌ ${e.message}`);
@@ -503,33 +522,43 @@ export async function handleIncomingMessage(client: Client, msg: Message) {
     const option = parseInt(bodyTrim, 10);
     switch (option) {
       case 1: {
-        await client.sendMessage(msg.from, '🚗 Solicitando apertura de portón de visitas...');
+  const releaseOpen = await globalMutex.lock();
+  try { await client.sendMessage(msg.from, '🚗 Solicitando apertura de portón de visitas...'); } finally { releaseOpen(); }
         const res = await openDoor('visits');
-        await client.sendMessage(msg.from, res.ok ? '✅ Apertura de visitas procesada.' : res.message);
+  const releaseOpen2 = await globalMutex.lock();
+  try { await client.sendMessage(msg.from, res.ok ? '✅ Apertura de visitas procesada.' : res.message); } finally { releaseOpen2(); }
         return; }
       case 2: {
-        await client.sendMessage(msg.from, '🚶 Solicitando apertura de portón peatonal...');
+  const releaseOpen3 = await globalMutex.lock();
+  try { await client.sendMessage(msg.from, '🚶 Solicitando apertura de portón peatonal...'); } finally { releaseOpen3(); }
         const res = await openDoor('pedestrian');
-        await client.sendMessage(msg.from, res.ok ? '✅ Apertura peatonal procesada.' : res.message);
+  const releaseOpen4 = await globalMutex.lock();
+  try { await client.sendMessage(msg.from, res.ok ? '✅ Apertura peatonal procesada.' : res.message); } finally { releaseOpen4(); }
         return; }
       case 3: {
-        await client.sendMessage(msg.from, '🖼️ Capturando imagen del portón de visitas...');
+  const releaseSnapStart = await globalMutex.lock();
+  try { await client.sendMessage(msg.from, '🖼️ Capturando imagen del portón de visitas...'); } finally { releaseSnapStart(); }
         const snap = await getGateSnapshot('visits');
         if (snap.ok && snap.buffer) {
           const media = new MessageMedia('image/jpeg', snap.buffer.toString('base64'), 'visitas.jpg');
-          await client.sendMessage(msg.from, media, { caption: 'Portón visitas' });
+          const releaseSnapSend = await globalMutex.lock();
+          try { await client.sendMessage(msg.from, media, { caption: 'Portón visitas' }); } finally { releaseSnapSend(); }
         } else {
-          await client.sendMessage(msg.from, snap.message || '❌ No se obtuvo imagen.');
+          const releaseSnapFail = await globalMutex.lock();
+          try { await client.sendMessage(msg.from, snap.message || '❌ No se obtuvo imagen.'); } finally { releaseSnapFail(); }
         }
         return; }
       case 4: {
-        await client.sendMessage(msg.from, '🖼️ Capturando imagen del portón peatonal...');
+  const releaseSnapStart2 = await globalMutex.lock();
+  try { await client.sendMessage(msg.from, '🖼️ Capturando imagen del portón peatonal...'); } finally { releaseSnapStart2(); }
         const snap = await getGateSnapshot('pedestrian');
         if (snap.ok && snap.buffer) {
           const media = new MessageMedia('image/jpeg', snap.buffer.toString('base64'), 'peatonal.jpg');
-          await client.sendMessage(msg.from, media, { caption: 'Portón peatonal' });
+          const releaseSnapSend2 = await globalMutex.lock();
+          try { await client.sendMessage(msg.from, media, { caption: 'Portón peatonal' }); } finally { releaseSnapSend2(); }
         } else {
-          await client.sendMessage(msg.from, snap.message || '❌ No se obtuvo imagen.');
+          const releaseSnapFail2 = await globalMutex.lock();
+          try { await client.sendMessage(msg.from, snap.message || '❌ No se obtuvo imagen.'); } finally { releaseSnapFail2(); }
         }
         return; }
       case 5: {

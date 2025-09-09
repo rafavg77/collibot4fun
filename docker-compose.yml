@@ -1,5 +1,15 @@
-version: '3.9'
 services:
+  # one-shot helper: corre como root y asegura permisos en los volúmenes
+  init-perms:
+    image: alpine:3.18
+    container_name: collibot-init-perms
+    command: sh -c 'chown -R 100:101 /data /session || true; chmod -R 770 /data /session || true; ls -ld /data /session; ls -la /data || true'
+    user: root
+    volumes:
+      - db_data:/data
+      - wa_session:/session
+    restart: 'no'
+
   bot:
     build: .
     container_name: collibot
@@ -7,14 +17,18 @@ services:
     env_file:
       - ./bot.env
     environment:
-      - DB_PATH=/data/db.sqlite
-      - WHATSAPP_AUTH_DIR=/session
+      DEBUG: WWebJS*
+      DB_PATH: /data/db.sqlite
+      WHATSAPP_AUTH_DIR: /session
     volumes:
       - db_data:/data
       - wa_session:/session
-    # Uncomment para debug detallado de whatsapp-web.js
-    # environment:
-    #   - DEBUG=WWebJS*
+    depends_on:
+      - init-perms
+    ports:
+      - "9222:9222"
+      - "8080:8080"
+
 volumes:
   db_data:
   wa_session:

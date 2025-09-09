@@ -5,4 +5,9 @@ Dockerfile
 dist
 *.log
 .wwebjs_auth
+.wwebjs_cache
 .env
+bot.env
+db.sqlite
+screenshots
+session

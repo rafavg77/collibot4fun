@@ -1,4 +1,5 @@
 bot.env
+.env
 db.sqlite
 session/
 session/*
@@ -6,3 +7,9 @@ dist/
 node_modules/
 .wwebjs_auth
 .wwebjs_cache
+screenshots/*
+*.log
+*.tgz
+*.zip
+coverage/
+data/

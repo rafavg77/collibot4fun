@@ -113,7 +113,7 @@ Se auditan (tipo y detalle):
 | `STARTUP_NOTIFY_NUMBERS` | No | Lista coma-separada de números a notificar al iniciar |
 | `NODE_ENV` | No | `development` / `production` (default: development) |
 
-Ejemplo `bot.env`:
+Ejemplo `bot.env` (usa credenciales ficticias):
 ```
 DB_PATH=./db.sqlite
 WHATSAPP_AUTH_DIR=.wwebjs_auth
@@ -237,6 +237,12 @@ docker volume rm collibot4fun_wa_session   # cuidado: pierdes sesión anterior
 
 ## 📤 Exportación CSV Auditoría
 En menú auditoría opción 9 genera un CSV con columnas clave (timestamp, actor, tipo, detalle). Se envía como documento al chat admin.
+
+## 🔒 Seguridad / Publicación
+- No publiques `bot.env` ni `.env`. Usa `bot.env.example` como plantilla.
+- Revisa que `db.sqlite`, `.wwebjs_auth/` y `/session` estén ignorados (ya lo están en `.gitignore` y `.dockerignore`).
+- No hornees secretos en la imagen Docker; injéctalos en tiempo de despliegue con `--env-file` o variables.
+- Antes de hacer push público, busca patrones sensibles (rtsp://user:pass@, tokens, claves) y cámbialos a variables de entorno.
 
 ## 🧹 Limpieza de Estados
 `reset` (mensaje plano) elimina cualquier flujo activo para el admin que lo envía (menus usuario/auditoría/blacklist/búsqueda/edición).

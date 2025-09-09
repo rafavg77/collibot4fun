@@ -28,8 +28,12 @@ RUN apk add --no-cache \
  && addgroup -S app && adduser -S app -G app
 COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist
-RUN mkdir -p /data /session /app/.wwebjs_auth \
- && chown -R app:app /data /session /app
-USER app
+# Create expected dirs (ownership should be handled externally by the operator)
+RUN mkdir -p /data /session /app/.wwebjs_auth
+# Add entrypoint script that logs versions and then runs the app as non-root
+COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 VOLUME ["/data","/session"]
+ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
+USER app
 CMD ["node","dist/app.js"]

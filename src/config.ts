@@ -20,9 +20,11 @@ export const ENV = {
   DOOR_API_BASE: required('DOOR_API_BASE').replace(/\/$/, ''),
   RTSP_VISITS_URL: required('RTSP_VISITS_URL'),
   RTSP_PEDESTRIAN_URL: required('RTSP_PEDESTRIAN_URL'),
+  HTTP_PORT: parseInt(process.env.HTTP_PORT || '8080', 10),
+  WA_WEB_VERSION: process.env.WA_WEB_VERSION || '',
 };
 
-export function getRequired(name: keyof typeof ENV): string { return ENV[name]; }
+export function getRequired(name: keyof typeof ENV): string { return String(ENV[name]); }
 
 export function splitCommaList(v: string): string[] {
   return v.split(',').map(s => s.trim()).filter(Boolean);
