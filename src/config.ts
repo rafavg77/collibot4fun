@@ -20,6 +20,7 @@ export const ENV = {
   DOOR_API_BASE: required('DOOR_API_BASE').replace(/\/$/, ''),
   RTSP_VISITS_URL: required('RTSP_VISITS_URL'),
   RTSP_PEDESTRIAN_URL: required('RTSP_PEDESTRIAN_URL'),
+  RTSP_FRONT_DOOR_URL: required('RTSP_FRONT_DOOR_URL'),
   HTTP_PORT: parseInt(process.env.HTTP_PORT || '8080', 10),
   WA_WEB_VERSION: process.env.WA_WEB_VERSION || '',
 };

@@ -2,7 +2,7 @@ import { Client, Message, MessageMedia } from 'whatsapp-web.js';
 import { Usuario, Blacklist, Attempt, UserType, AuditContext, Auditoria } from '../database/models';
 import { openDoor } from '../services/doorService';
 import { AppDataSource } from '../database';
-import { getGateSnapshot } from '../services/cameraService';
+import { getGateSnapshot, getFrontDoorSnapshot, getFrontDoorClip } from '../services/cameraService';
 import { createUserManual, listUsers, updateUser, deleteUser, listBlacklist, removeFromBlacklist, updateUserPhone, searchUsers } from '../services/userService';
 import { createAudit } from '../services/auditService';
 import { globalMutex } from '../utils/concurrency';
@@ -69,6 +69,8 @@ function buildMenu(isAdmin: boolean) {
     lines.push('6️⃣  Gestión de usuarios 👤');
     lines.push('7️⃣  Auditoría 📜');
   lines.push('8️⃣  Blacklist 🚫');
+  lines.push('9️⃣  Snapshot cámara frontal 🖼️');
+  lines.push('🔟  Video 30s cámara frontal 🎥');
   }
   lines.push('', 'Responde con el número de la opción.');
   return lines.join('\n');
@@ -518,7 +520,7 @@ export async function handleIncomingMessage(client: Client, msg: Message) {
   const inAnyUserFlow = userMenuAdmins.has(numero) || createUserStates.has(numero) || updateUserStates.has(numero) || deleteUserStates.has(numero) || searchUserStates.has(numero);
   const inBlacklistFlow = blacklistMenuAdmins.has(numero) || blacklistRemovalAwait.has(numero);
   const inAuditFlow = auditMenuActive.has(numero) || (auditCtx && auditCtx.awaitingFilter);
-  if (!inAnyUserFlow && !inBlacklistFlow && !inAuditFlow && /^[1-8]$/.test(bodyTrim)) {
+  if (!inAnyUserFlow && !inBlacklistFlow && !inAuditFlow && /^([1-9]|10)$/.test(bodyTrim)) {
     const option = parseInt(bodyTrim, 10);
     switch (option) {
       case 1: {
@@ -582,6 +584,46 @@ export async function handleIncomingMessage(client: Client, msg: Message) {
         blacklistMenuAdmins.add(numero);
         await sendReply('*Menú Blacklist*\n1️⃣ Listar\n2️⃣ Remover número\n3️⃣ Volver');
         return;
+      case 9: {
+        if (!isAdmin) { await sendReply('⛔ No autorizado.'); return; }
+        const rel1 = await globalMutex.lock();
+        try { await client.sendMessage(msg.from, '🖼️ Capturando imagen de cámara frontal...'); } finally { rel1(); }
+        const snap = await getFrontDoorSnapshot();
+        if (snap.ok && snap.buffer) {
+          const media = new MessageMedia('image/jpeg', snap.buffer.toString('base64'), 'front-door.jpg');
+          const rel2 = await globalMutex.lock();
+          try { await client.sendMessage(msg.from, media, { caption: 'Cámara frontal' }); } finally { rel2(); }
+        } else {
+          await sendReply(snap.message || '❌ No se obtuvo imagen.');
+        }
+        return; }
+      case 10: {
+        if (!isAdmin) { await sendReply('⛔ No autorizado.'); return; }
+        const rel3 = await globalMutex.lock();
+        try { await client.sendMessage(msg.from, '🎥 Grabando clip de 30s de la cámara frontal, espera...'); } finally { rel3(); }
+        try {
+          const clip = await getFrontDoorClip(30);
+          if (clip.ok && clip.buffer) {
+            const media = new MessageMedia('video/mp4', clip.buffer.toString('base64'), 'front-door-30s.mp4');
+            const rel4 = await globalMutex.lock();
+            try {
+              await client.sendMessage(msg.from, media, { sendMediaAsDocument: true, caption: 'Cámara frontal (30s)' });
+            } finally { rel4(); }
+          } else {
+            await sendReply(clip.message || '❌ No se pudo generar el video.');
+          }
+        } catch (e:any) {
+          await sendReply('❌ Falló el envío del video. Intentaré con menor calidad.');
+          const clip2 = await getFrontDoorClip(20);
+          if (clip2.ok && clip2.buffer) {
+            const media2 = new MessageMedia('video/mp4', clip2.buffer.toString('base64'), 'front-door.mp4');
+            const rel5 = await globalMutex.lock();
+            try { await client.sendMessage(msg.from, media2, { sendMediaAsDocument: true, caption: 'Cámara frontal' }); } finally { rel5(); }
+          } else {
+            await sendReply(clip2.message || '❌ No se pudo enviar el video.');
+          }
+        }
+        return; }
     }
   }
 
